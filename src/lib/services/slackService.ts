@@ -1,4 +1,4 @@
-import { WebClient } from '@slack/web-api';
+import { WebClient, Block, KnownBlock } from '@slack/web-api';
 
 export class SlackService {
   private client: WebClient;
@@ -38,7 +38,7 @@ export class SlackService {
     }
   }
 
-  async sendMessage(channelId: string, text: string, blocks?: any[]) {
+  async sendMessage(channelId: string, text: string, blocks?: (Block | KnownBlock)[]) {
     try {
       const result = await this.client.chat.postMessage({
         channel: channelId,
@@ -53,23 +53,60 @@ export class SlackService {
     }
   }
 
-  extractLinksFromMessage(message: unknown) {
-    interface Attachment { from_url?: string }
-    const text = (message as { text?: string }).text || '';
+  extractLinksFromMessage(message: unknown): string[] {
+    interface MessageType {
+      text?: string;
+      attachments?: Array<{ from_url?: string }>;
+    }
+    
+    const typedMessage = message as MessageType;
+    const text = typedMessage.text || '';
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const urls = text.match(urlRegex) || [];
-    const attachments: Attachment[] = (message as { attachments?: Attachment[] }).attachments || [];
-    const attachmentUrls = attachments.map((att) => att.from_url).filter(Boolean);
+    
+    const attachments = typedMessage.attachments || [];
+    const attachmentUrls: string[] = [];
+    
+    for (const attachment of attachments) {
+      if (attachment.from_url && typeof attachment.from_url === 'string') {
+        attachmentUrls.push(attachment.from_url);
+      }
+    }
+    
     return [...urls, ...attachmentUrls];
   }
 
   async scrapeChannelLinks(channelId: string) {
     try {
       const messages = await this.getChannelMessages(channelId, 1000);
-      const links: Array<Record<string, unknown>> = [];
+      
+      interface SlackMessage {
+        user?: string;
+        ts?: string;
+        client_msg_id?: string;
+        attachments?: Array<{ from_url?: string }>;
+        text?: string;
+      }
+      
+      interface LinkResult {
+        url: string;
+        sender: {
+          id: string;
+          name: string;
+          avatar: string;
+        };
+        timestamp: Date;
+        slackMessageId: string;
+        channel: {
+          id: string;
+          name: string;
+        };
+      }
+      
+      const links: LinkResult[] = [];
 
       for (const message of messages as unknown[]) {
-        const msg = message as { user?: string; ts?: string; client_msg_id?: string; attachments?: { from_url?: string }[]; text?: string };
+        const msg = message as SlackMessage;
         if (!msg.user || !msg.ts) continue;
 
         const urls = this.extractLinksFromMessage(msg);
@@ -78,7 +115,7 @@ export class SlackService {
           const userInfo = await this.getUserInfo(msg.user);
 
           for (const url of urls) {
-            if (url) {
+            if (url && typeof url === 'string') {
               links.push({
                 url: url.replace(/[<>]/g, ''), // Remove Slack's URL wrapping
                 sender: {
