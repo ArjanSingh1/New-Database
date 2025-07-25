@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { SlackService } from '@/lib/services/slackService';
+import { getSlackLinks } from '@/lib/services/slackService';
 import connectDB from '@/lib/database';
 import { Link } from '@/lib/models/Link';
 
@@ -7,21 +7,39 @@ export async function GET(req: NextRequest) {
   try {
     console.log('Slack Links API called');
     const url = new URL(req.url);
-    const days = parseInt(url.searchParams.get('days') || '7');
+    const from = url.searchParams.get('from');
+    const to = url.searchParams.get('to');
     const sender = url.searchParams.get('sender') || undefined;
-    
-    console.log(`Fetching links for ${days} days, sender: ${sender || 'all'}`);
-    
-    const slack = new SlackService();
-    const channelId = process.env.SLACK_CHANNEL_ID!;
-    const links = await slack.scrapeChannelLinks(channelId, days, sender);
-    
-    console.log(`Found ${links.length} links`);
-    
+    const keyword = url.searchParams.get('keyword') || '';
+
+    if (!from || !to) {
+      console.error('[Slack Links API] Missing from/to params', { from, to });
+      return new Response(JSON.stringify({ error: 'Missing from/to params' }), { status: 400 });
+    }
+
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+    if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+      console.error('[Slack Links API] Invalid date format', { from, to });
+      return new Response(JSON.stringify({ error: 'Invalid date format' }), { status: 400 });
+    }
+    const fromTs = Math.floor(fromDate.getTime() / 1000);
+    const toTs = Math.floor(toDate.getTime() / 1000);
+
+    // Add logging for debugging
+    console.log(`[Slack Links API] from: ${from} (${fromTs}), to: ${to} (${toTs}), sender: ${sender}, keyword: ${keyword}`);
+
+    let links;
+    try {
+      links = await getSlackLinks({ from: fromTs, to: toTs, sender, keyword });
+    } catch (fetchErr) {
+      console.error('[Slack Links API] getSlackLinks error:', fetchErr);
+      return new Response(JSON.stringify({ error: 'Failed to fetch Slack links', details: fetchErr instanceof Error ? fetchErr.message : fetchErr }), { status: 500 });
+    }
+
     // Save to MongoDB and get back with proper IDs
     await connectDB();
     const savedLinks = [];
-    
     for (const link of links) {
       try {
         const existingLink = await Link.findOne({ slackMessageId: link.slackMessageId });
@@ -46,7 +64,7 @@ export async function GET(req: NextRequest) {
         savedLinks.push(link);
       }
     }
-    
+
     return new Response(JSON.stringify({ links: savedLinks }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },

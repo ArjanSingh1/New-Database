@@ -1,6 +1,11 @@
 
 "use client";
 import { useState, useEffect } from "react";
+// For calendar, install: npm install react-date-range
+// import { DateRange } from 'react-date-range';
+// import 'react-date-range/dist/styles.css';
+// import 'react-date-range/dist/theme/default.css';
+
 
 type Link = {
   _id?: string;
@@ -9,7 +14,12 @@ type Link = {
   timestamp: string;
   slackMessageId: string;
   channel: { id: string; name: string };
-  votes: { up: number; down: number };
+  votes: {
+    up: number;
+    down: number;
+    upVoters?: string[];
+    downVoters?: string[];
+  };
   comments: Array<{
     id: string;
     user: string;
@@ -17,6 +27,7 @@ type Link = {
     timestamp: string;
   }>;
 };
+
 
 type Article = {
   _id?: string;
@@ -28,7 +39,12 @@ type Article = {
   tags: string[];
   keywords: string[];
   scrapedAt: string;
-  votes: { up: number; down: number };
+  votes: {
+    up: number;
+    down: number;
+    upVoters?: string[];
+    downVoters?: string[];
+  };
   comments: Array<{
     id: string;
     user: string;
@@ -38,205 +54,215 @@ type Article = {
 };
 
 export default function Home() {
-  const [tab, setTab] = useState<"ai-links" | "b2b-vault">("ai-links");
-  
-  // AI Links state
+  // State and hooks
+  const [tab, setTab] = useState<'ai-links' | 'b2b-vault'>('ai-links');
+  const [userName, setUserName] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [senderFilter, setSenderFilter] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [links, setLinks] = useState<Link[]>([]);
   const [linksLoading, setLinksLoading] = useState(false);
-  const [linksError, setLinksError] = useState<string | null>(null);
-  const [dayFilter, setDayFilter] = useState(7);
-  const [senderFilter, setSenderFilter] = useState('');
-  const [uniqueSenders, setUniqueSenders] = useState<string[]>([]);
-  
-  // B2B Vault state
+  const [linksError, setLinksError] = useState('');
   const [articles, setArticles] = useState<Article[]>([]);
   const [articlesLoading, setArticlesLoading] = useState(false);
-  const [articlesError, setArticlesError] = useState<string | null>(null);
-  
-  // Comment states
-  const [commentTexts, setCommentTexts] = useState<Record<string, string>>({});
-  const [userName, setUserName] = useState('Anonymous');
+  const [articlesError, setArticlesError] = useState('');
+  const [commentTexts, setCommentTexts] = useState<{ [id: string]: string }>({});
 
-  const fetchLinks = (days = dayFilter, sender = senderFilter) => {
+  // Unique senders for filter dropdown
+  const uniqueSenders = Array.from(new Set(links.map(l => l.sender.name)));
+
+  // Filtering logic
+  const filteredLinks = links.filter(link => {
+    const matchesSender = !senderFilter || link.sender.name === senderFilter;
+    const matchesDate = (!fromDate || new Date(link.timestamp) >= new Date(fromDate)) && (!toDate || new Date(link.timestamp) <= new Date(toDate));
+    const matchesSearch = !searchTerm || link.url.toLowerCase().includes(searchTerm.toLowerCase()) || (link.comments || []).some(c => c.text.toLowerCase().includes(searchTerm.toLowerCase()));
+    return matchesSender && matchesDate && matchesSearch;
+  });
+  const filteredArticles = articles.filter(article => {
+    const matchesSearch = !searchTerm || article.title.toLowerCase().includes(searchTerm.toLowerCase()) || article.summary.toLowerCase().includes(searchTerm.toLowerCase()) || (article.comments || []).some(c => c.text.toLowerCase().includes(searchTerm.toLowerCase()));
+    return matchesSearch;
+  });
+
+  // Fetch links from API
+  const fetchLinks = async (from?: string, to?: string, sender?: string) => {
     setLinksLoading(true);
-    const params = new URLSearchParams();
-    params.set('days', days.toString());
-    if (sender) params.set('sender', sender);
-    
-    fetch(`/api/slack-links?${params}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setLinks(data.links || []);
-        setLinksError(null);
-        
-        // Extract unique senders
-        const senders = [...new Set((data.links || []).map((link: Link) => link.sender.name))].filter(Boolean) as string[];
-        setUniqueSenders(senders);
-      })
-      .catch(() => setLinksError("Failed to load Slack links."))
-      .finally(() => setLinksLoading(false));
+    setLinksError('');
+    try {
+      const params = new URLSearchParams();
+      if (from) params.append('from', from);
+      if (to) params.append('to', to);
+      if (sender) params.append('sender', sender);
+      const res = await fetch(`/api/slack-links?${params.toString()}`);
+      if (!res.ok) throw new Error('Failed to fetch links');
+      const data = await res.json();
+      setLinks(data.links || []);
+    } catch (err: any) {
+      setLinksError(err.message || 'Error fetching links');
+    } finally {
+      setLinksLoading(false);
+    }
   };
 
-  const fetchArticles = () => {
+  // Fetch articles from API
+  const fetchArticles = async () => {
     setArticlesLoading(true);
-    fetch("/api/b2b-vault")
-      .then((res) => res.json())
-      .then((data) => {
-        setArticles(data.articles || []);
-        setArticlesError(null);
-      })
-      .catch(() => setArticlesError("Failed to load B2B Vault articles."))
-      .finally(() => setArticlesLoading(false));
-  };
-
-  const handleVote = async (id: string, voteType: 'up' | 'down', isArticle = false) => {
+    setArticlesError('');
     try {
-      const response = await fetch('/api/vote', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ linkId: id, voteType, isArticle, userId: userName || 'Anonymous' }),
-      });
-      if (response.ok) {
-        const { votes } = await response.json();
-        if (isArticle) {
-          setArticles(prev => prev.map(article => 
-            article._id === id ? { ...article, votes } : article
-          ));
-        } else {
-          setLinks(prev => prev.map(link => 
-            link._id === id ? { ...link, votes } : link
-          ));
-        }
-      } else {
-        const errorText = await response.text();
-        alert('Vote failed: ' + errorText);
-        console.error('Vote failed:', errorText);
-      }
-    } catch (error) {
-      console.error('Vote failed:', error);
+      const res = await fetch('/api/b2b-vault');
+      if (!res.ok) throw new Error('Failed to fetch articles');
+      const data = await res.json();
+      setArticles(data.articles || []);
+    } catch (err: any) {
+      setArticlesError(err.message || 'Error fetching articles');
+    } finally {
+      setArticlesLoading(false);
     }
   };
 
+  // Voting handler
+  const handleVote = async (id: string, type: 'up' | 'down', isArticle = false) => {
+    if (!userName) return alert('Please enter your name to vote.');
+    try {
+      const res = await fetch(`/api/vote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, type, user: userName, isArticle })
+      });
+      if (!res.ok) throw new Error('Failed to vote');
+      if (isArticle) fetchArticles();
+      else fetchLinks(fromDate, toDate, senderFilter);
+    } catch (err) {
+      alert('Error voting.');
+    }
+  };
+
+  // Comment handler
   const handleComment = async (id: string, isArticle = false) => {
-    const text = commentTexts[id];
-    if (!text?.trim()) return;
-
+    if (!userName) return alert('Please enter your name to comment.');
+    const text = commentTexts[id]?.trim();
+    if (!text) return;
     try {
-      const response = await fetch('/api/comments', {
+      const res = await fetch(`/api/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ linkId: id, user: userName, text, isArticle }),
+        body: JSON.stringify({ id, user: userName, text, isArticle })
       });
-      
-      if (response.ok) {
-        const { comment } = await response.json();
-        if (isArticle) {
-          setArticles(prev => prev.map(article => 
-            article._id === id ? { ...article, comments: [...(article.comments || []), comment] } : article
-          ));
-        } else {
-          setLinks(prev => prev.map(link => 
-            link._id === id ? { ...link, comments: [...(link.comments || []), comment] } : link
-          ));
-        }
-        setCommentTexts(prev => ({ ...prev, [id]: '' }));
-      } else {
-        console.error('Comment failed:', await response.text());
-      }
-    } catch (error) {
-      console.error('Comment failed:', error);
+      if (!res.ok) throw new Error('Failed to comment');
+      setCommentTexts(prev => ({ ...prev, [id]: '' }));
+      if (isArticle) fetchArticles();
+      else fetchLinks(fromDate, toDate, senderFilter);
+    } catch (err) {
+      alert('Error posting comment.');
     }
   };
 
+  // Initial data load
   useEffect(() => {
-    if (tab === "ai-links") {
-      fetchLinks();
-    } else if (tab === "b2b-vault" && articles.length === 0) {
-      fetchArticles();
-    }
+    if (tab === 'ai-links') fetchLinks(fromDate, toDate, senderFilter);
+    else fetchArticles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab]);
+  }, [tab, fromDate, toDate, senderFilter]);
 
+  // ...JSX follows...
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col items-center py-10 px-4">
-      <h1 className="text-3xl sm:text-5xl font-bold mb-8 text-center text-gray-900 dark:text-white drop-shadow-lg">Global Link Vault</h1>
-      
-      {/* User Name Input */}
-      <div className="mb-4">
-        <input
-          type="text"
-          placeholder="Your name"
-          value={userName}
-          onChange={(e) => setUserName(e.target.value)}
-          className="px-3 py-1 border rounded text-sm"
-        />
-      </div>
-      
-      <div className="flex space-x-2 mb-8">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-gray-800 flex flex-col items-center py-8 px-2">
+      {/* Topbar */}
+      <header className="w-full max-w-5xl flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
+        <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white tracking-tight">Global Link Vault</h1>
+        <div className="flex gap-2 items-center">
+          <input
+            type="text"
+            placeholder="Your name"
+            value={userName}
+            onChange={(e) => setUserName(e.target.value)}
+            className="px-3 py-1 border rounded text-sm bg-white dark:bg-gray-800 shadow-sm focus:ring-2 focus:ring-blue-400"
+          />
+          <button
+            className="px-4 py-2 rounded bg-blue-500 text-white font-semibold shadow hover:bg-blue-600 transition"
+            onClick={() => setFiltersOpen((v) => !v)}
+            title="Show filters"
+          >
+            {filtersOpen ? 'Hide Filters' : 'Show Filters'}
+          </button>
+        </div>
+      </header>
+
+      {/* Navigation Tabs */}
+      <nav className="w-full max-w-5xl flex gap-2 mb-4">
         <button
-          className={`px-6 py-2 rounded-t-lg font-semibold transition-colors duration-200 focus:outline-none ${tab === "ai-links" ? "bg-white dark:bg-gray-800 text-blue-600 shadow" : "bg-gray-200 dark:bg-gray-700 text-gray-500"}`}
+          className={`flex-1 px-6 py-2 rounded-t-lg font-semibold transition-colors duration-200 focus:outline-none ${tab === "ai-links" ? "bg-white dark:bg-gray-800 text-blue-600 shadow" : "bg-gray-200 dark:bg-gray-700 text-gray-500"}`}
           onClick={() => setTab("ai-links")}
         >
           AI Links
         </button>
         <button
-          className={`px-6 py-2 rounded-t-lg font-semibold transition-colors duration-200 focus:outline-none ${tab === "b2b-vault" ? "bg-white dark:bg-gray-800 text-blue-600 shadow" : "bg-gray-200 dark:bg-gray-700 text-gray-500"}`}
+          className={`flex-1 px-6 py-2 rounded-t-lg font-semibold transition-colors duration-200 focus:outline-none ${tab === "b2b-vault" ? "bg-white dark:bg-gray-800 text-blue-600 shadow" : "bg-gray-200 dark:bg-gray-700 text-gray-500"}`}
           onClick={() => setTab("b2b-vault")}
         >
           B2B Vault
         </button>
-      </div>
+      </nav>
+
+      {/* Filters Panel */}
+      {filtersOpen && (
+        <section className="w-full max-w-5xl bg-white dark:bg-gray-800 rounded shadow p-4 mb-6 flex flex-col sm:flex-row gap-4 items-center animate-fade-in">
+          {/* Calendar date range picker placeholder */}
+          <div className="flex flex-col items-start">
+            <label className="text-gray-700 dark:text-gray-200 font-medium mb-1">Date Range</label>
+            {/* Replace with <DateRange ... /> for real calendar */}
+            <div className="flex gap-2">
+              <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="px-2 py-1 border rounded text-sm" />
+              <span className="text-gray-400">to</span>
+              <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="px-2 py-1 border rounded text-sm" />
+            </div>
+          </div>
+          {/* Sender filter */}
+          {tab === "ai-links" && (
+            <div className="flex flex-col items-start">
+              <label className="text-gray-700 dark:text-gray-200 font-medium mb-1">Sender</label>
+              <select
+                className="px-3 py-1 border rounded text-sm bg-white dark:bg-gray-700"
+                value={senderFilter}
+                onChange={e => setSenderFilter(e.target.value)}
+              >
+                <option value="">All senders</option>
+                {uniqueSenders.map(sender => (
+                  <option key={sender} value={sender}>{sender}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {/* Smart search input */}
+          <div className="flex flex-col items-start flex-1 min-w-[180px]">
+            <label className="text-gray-700 dark:text-gray-200 font-medium mb-1">Smart Search</label>
+            <input
+              type="text"
+              placeholder="Type keywords or a question..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="px-3 py-1 border rounded text-sm w-full bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-400"
+            />
+          </div>
+          {/* Refresh button */}
+          {tab === "ai-links" && (
+            <button
+              className="px-4 py-2 bg-blue-500 text-white rounded font-semibold hover:bg-blue-600 transition-colors shadow"
+              onClick={() => fetchLinks(fromDate, toDate, senderFilter)}
+            >
+              Refresh
+            </button>
+          )}
+        </section>
+      )}
       
-      <div className="w-full max-w-4xl bg-white dark:bg-gray-800 rounded-b-lg shadow-lg p-6 min-h-[300px]">
+      <main className="w-full max-w-5xl bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 min-h-[300px]">
         {tab === "ai-links" ? (
           <div>
             <h2 className="text-xl font-semibold mb-4 text-center text-gray-800 dark:text-gray-200">AI Links from Slack</h2>
             
-            {/* Filters */}
-            <div className="mb-4 flex flex-wrap gap-4 items-center justify-center">
-              <div>
-                <label className="text-sm text-gray-600 dark:text-gray-400 mr-2">Days:</label>
-                <select 
-                  value={dayFilter} 
-                  onChange={(e) => {
-                    const days = parseInt(e.target.value);
-                    setDayFilter(days);
-                    fetchLinks(days, senderFilter);
-                  }}
-                  className="px-2 py-1 border rounded text-sm"
-                >
-                  <option value={1}>1 day</option>
-                  <option value={7}>7 days</option>
-                  <option value={30}>30 days</option>
-                  <option value={90}>90 days</option>
-                  <option value={365}>1 year</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="text-sm text-gray-600 dark:text-gray-400 mr-2">Sender:</label>
-                <select 
-                  value={senderFilter} 
-                  onChange={(e) => {
-                    setSenderFilter(e.target.value);
-                    fetchLinks(dayFilter, e.target.value);
-                  }}
-                  className="px-2 py-1 border rounded text-sm"
-                >
-                  <option value="">All senders</option>
-                  {uniqueSenders.map(sender => (
-                    <option key={sender} value={sender}>{sender}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <button 
-                onClick={() => fetchLinks(dayFilter, senderFilter)}
-                className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
-              >
-                Refresh
-              </button>
-            </div>
+            {/* Filters removed, now in top bar */}
             
             {linksLoading ? (
               <div className="text-center text-gray-400">Loading links...</div>
@@ -246,8 +272,12 @@ export default function Home() {
               <div className="text-center text-gray-400">No links found for the selected filters.</div>
             ) : (
               <div className="space-y-4">
-                {links.map((link) => (
-                  <div key={link._id || link.slackMessageId} className="bg-gray-100 dark:bg-gray-700 rounded p-4">
+                {filteredLinks.map((link) => (
+                  <div
+                    key={link._id || link.slackMessageId}
+                    className="bg-gray-100 dark:bg-gray-700 rounded p-4 shadow-sm hover:shadow-lg transition-shadow group border border-transparent hover:border-blue-400 cursor-pointer"
+                    tabIndex={0}
+                  >
                     <div className="flex flex-col sm:flex-row sm:items-start gap-3">
                       <div className="flex items-center gap-3">
                         <img src={link.sender.avatar} alt={link.sender.name} className="w-8 h-8 rounded-full border" />
@@ -257,7 +287,13 @@ export default function Home() {
                         </div>
                       </div>
                       <div className="flex-1">
-                        <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 underline break-all">
+                        <a
+                          href={link.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 dark:text-blue-400 underline break-all hover:text-blue-800 dark:hover:text-blue-200 transition-colors"
+                          title="Open link in new tab"
+                        >
                           {link.url}
                         </a>
                       </div>
@@ -265,17 +301,21 @@ export default function Home() {
                     
                     {/* Voting */}
                     <div className="flex items-center gap-4 mt-3">
-                      <button 
+                      <button
                         onClick={() => handleVote(link._id!, 'up')}
-                        className="flex items-center gap-1 text-green-600 hover:text-green-700"
+                        className={`flex items-center gap-1 hover:text-green-700 text-green-600 group-hover:scale-110 transition-transform`}
+                        style={{ fontWeight: link.votes?.upVoters?.includes(userName) ? 'bold' : 'normal' }}
                         disabled={!link._id}
+                        title={link.votes?.upVoters?.includes(userName) ? 'Remove upvote' : 'Upvote'}
                       >
                         ↑ {link.votes?.up || 0}
                       </button>
-                      <button 
+                      <button
                         onClick={() => handleVote(link._id!, 'down')}
-                        className="flex items-center gap-1 text-red-600 hover:text-red-700"
+                        className={`flex items-center gap-1 hover:text-red-700 text-red-600 group-hover:scale-110 transition-transform`}
+                        style={{ fontWeight: link.votes?.downVoters?.includes(userName) ? 'bold' : 'normal' }}
                         disabled={!link._id}
+                        title={link.votes?.downVoters?.includes(userName) ? 'Remove downvote' : 'Downvote'}
                       >
                         ↓ {link.votes?.down || 0}
                       </button>
@@ -323,7 +363,7 @@ export default function Home() {
               <div className="text-center text-gray-400">No articles found.</div>
             ) : (
               <div className="space-y-4">
-                {articles.map((article, idx) => (
+                {filteredArticles.map((article, idx) => (
                   <div key={article._id || `article-${idx}`} className="bg-gray-100 dark:bg-gray-700 rounded p-4">
                     <div className="flex flex-col sm:flex-row sm:items-start gap-3">
                       {article.image && (
@@ -343,22 +383,30 @@ export default function Home() {
                     </div>
                     
                     {/* Voting */}
-                    <div className="flex items-center gap-4 mt-3">
-                      <button 
-                        onClick={() => handleVote(article._id!, 'up', true)}
-                        className="flex items-center gap-1 text-green-600 hover:text-green-700"
-                        disabled={!article._id}
-                      >
-                        ↑ {article.votes?.up || 0}
-                      </button>
-                      <button 
-                        onClick={() => handleVote(article._id!, 'down', true)}
-                        className="flex items-center gap-1 text-red-600 hover:text-red-700"
-                        disabled={!article._id}
-                      >
-                        ↓ {article.votes?.down || 0}
-                      </button>
-                    </div>
+                <div className="flex items-center gap-4 mt-3">
+                  <button
+                    onClick={() => {
+                      if (article.votes?.upVoters?.includes(userName)) return;
+                      handleVote(article._id!, 'up', true);
+                    }}
+                    className={`flex items-center gap-1 hover:text-green-700 text-green-600`}
+                    style={{ fontWeight: article.votes?.upVoters?.includes(userName) ? 'bold' : 'normal' }}
+                    disabled={!article._id}
+                  >
+                    ↑ {article.votes?.up || 0}
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (article.votes?.downVoters?.includes(userName)) return;
+                      handleVote(article._id!, 'down', true);
+                    }}
+                    className={`flex items-center gap-1 hover:text-red-700 text-red-600`}
+                    style={{ fontWeight: article.votes?.downVoters?.includes(userName) ? 'bold' : 'normal' }}
+                    disabled={!article._id}
+                  >
+                    ↓ {article.votes?.down || 0}
+                  </button>
+                </div>
                     
                     {/* Comments */}
                     <div className="mt-3">
@@ -392,9 +440,10 @@ export default function Home() {
             )}
           </div>
         )}
-      </div>
+      </main>
       <footer className="mt-10 text-xs text-gray-400 text-center">
-        &copy; {new Date().getFullYear()} Global Link Vault. All rights reserved.
+        &copy; {new Date().getFullYear()} Global Link Vault. All rights reserved.<br/>
+        <span className="text-gray-300">UI powered by Next.js, Tailwind CSS, and OpenAI API (smart search coming soon)</span>
       </footer>
     </div>
   );

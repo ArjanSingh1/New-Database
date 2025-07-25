@@ -21,36 +21,38 @@ export async function POST(req: NextRequest) {
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    // Only allow one upvote/downvote per user
+    // Toggle voting: pressing again removes your vote
     if (voteType === 'up') {
-      if (item.votes.upVoters?.includes(userId)) {
-        return new Response(JSON.stringify({ error: 'Already upvoted' }), {
-          status: 403,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      item.votes.up += 1;
       item.votes.upVoters = item.votes.upVoters || [];
-      item.votes.upVoters.push(userId);
-      // Remove from downVoters if present
-      if (item.votes.downVoters?.includes(userId)) {
-        item.votes.downVoters = item.votes.downVoters.filter((id: string) => id !== userId);
-        item.votes.down = Math.max(0, item.votes.down - 1);
-      }
-    } else {
-      if (item.votes.downVoters?.includes(userId)) {
-        return new Response(JSON.stringify({ error: 'Already downvoted' }), {
-          status: 403,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      item.votes.down += 1;
-      item.votes.downVoters = item.votes.downVoters || [];
-      item.votes.downVoters.push(userId);
-      // Remove from upVoters if present
-      if (item.votes.upVoters?.includes(userId)) {
+      if (item.votes.upVoters.includes(userId)) {
+        // Remove upvote
         item.votes.upVoters = item.votes.upVoters.filter((id: string) => id !== userId);
         item.votes.up = Math.max(0, item.votes.up - 1);
+      } else {
+        // Add upvote
+        item.votes.up += 1;
+        item.votes.upVoters.push(userId);
+        // Remove from downVoters if present
+        if (item.votes.downVoters?.includes(userId)) {
+          item.votes.downVoters = item.votes.downVoters.filter((id: string) => id !== userId);
+          item.votes.down = Math.max(0, item.votes.down - 1);
+        }
+      }
+    } else {
+      item.votes.downVoters = item.votes.downVoters || [];
+      if (item.votes.downVoters.includes(userId)) {
+        // Remove downvote
+        item.votes.downVoters = item.votes.downVoters.filter((id: string) => id !== userId);
+        item.votes.down = Math.max(0, item.votes.down - 1);
+      } else {
+        // Add downvote
+        item.votes.down += 1;
+        item.votes.downVoters.push(userId);
+        // Remove from upVoters if present
+        if (item.votes.upVoters?.includes(userId)) {
+          item.votes.upVoters = item.votes.upVoters.filter((id: string) => id !== userId);
+          item.votes.up = Math.max(0, item.votes.up - 1);
+        }
       }
     }
     await item.save();

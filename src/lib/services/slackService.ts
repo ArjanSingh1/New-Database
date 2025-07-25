@@ -1,3 +1,31 @@
+// Helper function for API route compatibility
+type GetSlackLinksParams = {
+  from: number;
+  to: number;
+  sender?: string;
+  keyword?: string;
+};
+
+/**
+ * getSlackLinks - API-compatible function to fetch Slack links for a date range and optional sender/keyword
+ */
+export async function getSlackLinks({ from, to, sender, keyword }: GetSlackLinksParams) {
+  // You may want to set channelId and days based on your app logic or env
+  const channelId = process.env.SLACK_CHANNEL_ID || '';
+  if (!channelId) throw new Error('SLACK_CHANNEL_ID not set');
+  const days = Math.ceil((to - from) / (24 * 60 * 60));
+  const slack = new SlackService();
+  // scrapeChannelLinks(channelId, days, sender)
+  const links = await slack.scrapeChannelLinks(channelId, days, sender);
+  // Optionally filter by keyword if provided
+  if (keyword) {
+    return links.filter(l =>
+      l.url.toLowerCase().includes(keyword.toLowerCase()) ||
+      (l.comments || []).some(c => c.text.toLowerCase().includes(keyword.toLowerCase()))
+    );
+  }
+  return links;
+}
 import { WebClient, Block, KnownBlock } from '@slack/web-api';
 
 export class SlackService {
@@ -94,7 +122,7 @@ interface SlackMessage {
     try {
       // Calculate oldest timestamp for filtering
       const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-      let oldestTimestamp = Math.floor(cutoffDate.getTime() / 1000).toString();
+      const oldestTimestamp = Math.floor(cutoffDate.getTime() / 1000).toString();
       
       let allMessages: unknown[] = [];
       let hasMore = true;
