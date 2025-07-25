@@ -27,6 +27,8 @@ const articleSchema = new mongoose.Schema({
   votes: {
     up: { type: Number, default: 0 },
     down: { type: Number, default: 0 },
+    upVoters: [{ type: String }], // user IDs
+    downVoters: [{ type: String }],
   },
   comments: [{
     id: String,

@@ -94,9 +94,8 @@ export default function Home() {
       const response = await fetch('/api/vote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ linkId: id, voteType, isArticle }),
+        body: JSON.stringify({ linkId: id, voteType, isArticle, userId: userName || 'Anonymous' }),
       });
-      
       if (response.ok) {
         const { votes } = await response.json();
         if (isArticle) {
@@ -109,7 +108,9 @@ export default function Home() {
           ));
         }
       } else {
-        console.error('Vote failed:', await response.text());
+        const errorText = await response.text();
+        alert('Vote failed: ' + errorText);
+        console.error('Vote failed:', errorText);
       }
     } catch (error) {
       console.error('Vote failed:', error);

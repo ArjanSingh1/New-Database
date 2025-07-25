@@ -19,15 +19,20 @@ interface SlackMessage {
     this.client = new WebClient(token);
   }
 
-  async getChannelMessages(channelId: string, limit: number = 100, oldest?: string) {
+
+  async getChannelMessagesWithCursor(channelId: string, limit: number = 100, oldest?: string, cursor?: string) {
     try {
       const result = await this.client.conversations.history({
         channel: channelId,
         limit,
         oldest, // Unix timestamp
+        cursor,
       });
-
-      return result.messages || [];
+      return {
+        messages: result.messages || [],
+        has_more: result.has_more,
+        next_cursor: result.response_metadata?.next_cursor,
+      };
     } catch (error) {
       console.error('Error fetching channel messages:', error);
       throw error;
@@ -93,31 +98,17 @@ interface SlackMessage {
       
       let allMessages: unknown[] = [];
       let hasMore = true;
-      
-      // Paginate through all messages within the time range
-      while (hasMore && allMessages.length < 5000) { // Safety limit
-        const messages = await this.getChannelMessages(channelId, 1000, oldestTimestamp);
-        
+      let cursor: string | undefined = undefined;
+      // Paginate through all messages using next_cursor
+      while (hasMore && allMessages.length < 50000) { // Safety limit
+        const { messages, has_more, next_cursor } = await this.getChannelMessagesWithCursor(channelId, 1000, oldestTimestamp, cursor);
         if (!messages || messages.length === 0) {
           hasMore = false;
           break;
         }
-        
         allMessages = allMessages.concat(messages);
-        
-        // Check if we need to paginate further
-        const lastMessage = messages[messages.length - 1] as SlackMessage;
-        if (lastMessage && lastMessage.ts) {
-          const lastMessageTime = new Date(parseFloat(lastMessage.ts) * 1000);
-          if (lastMessageTime > cutoffDate && messages.length === 1000) {
-            // Continue pagination
-            oldestTimestamp = lastMessage.ts;
-          } else {
-            hasMore = false;
-          }
-        } else {
-          hasMore = false;
-        }
+        hasMore = !!has_more && !!next_cursor;
+        cursor = next_cursor;
       }
       
       console.log(`Fetched ${allMessages.length} total messages for ${days} days`);
@@ -202,8 +193,10 @@ interface SlackMessage {
         }
       }
 
-      console.log(`Extracted ${links.length} links after filtering`);
-      return links;
+      // Deduplicate by URL
+      const uniqueLinks = Array.from(new Map(links.map(l => [l.url, l])).values());
+      console.log(`Extracted ${uniqueLinks.length} unique links after filtering`);
+      return uniqueLinks;
     } catch (error) {
       console.error('Error scraping channel links:', error);
       throw error;

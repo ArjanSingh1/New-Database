@@ -2,19 +2,35 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 
 export class B2BVaultScraper {
-  private baseUrl = 'https://b2bvault.ws';
+  private baseUrl = 'https://www.theb2bvault.com/';
 
   async scrapeArticles(limit: number = 100) {
     try {
       console.log(`Starting scrape of ${this.baseUrl}`);
       
-      const response = await axios.get(this.baseUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        },
-        timeout: 30000,
-      });
 
+      // Retry logic for axios
+      let response;
+      let attempt = 0;
+      const maxAttempts = 3;
+      const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+      while (attempt < maxAttempts) {
+        try {
+          response = await axios.get(this.baseUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            },
+            timeout: 60000,
+          });
+          break;
+        } catch (err) {
+          attempt++;
+          if (attempt >= maxAttempts) throw err;
+          await delay(1000 * Math.pow(2, attempt));
+        }
+      }
+
+      if (!response) throw new Error('Failed to fetch B2B Vault homepage after retries');
       console.log(`Received response, status: ${response.status}`);
       const $ = cheerio.load(response.data);
       
@@ -156,13 +172,29 @@ export class B2BVaultScraper {
 
   async scrapeArticleContent(url: string) {
     try {
-      const response = await axios.get(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        },
-        timeout: 30000,
-      });
 
+      // Retry logic for axios
+      let response;
+      let attempt = 0;
+      const maxAttempts = 3;
+      const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+      while (attempt < maxAttempts) {
+        try {
+          response = await axios.get(url, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            },
+            timeout: 60000,
+          });
+          break;
+        } catch (err) {
+          attempt++;
+          if (attempt >= maxAttempts) throw err;
+          await delay(1000 * Math.pow(2, attempt));
+        }
+      }
+
+      if (!response) throw new Error('Failed to fetch article after retries');
       const $ = cheerio.load(response.data);
       
       // Extract article content
