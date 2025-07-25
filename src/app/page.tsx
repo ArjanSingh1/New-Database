@@ -1,102 +1,145 @@
-import Image from "next/image";
+
+"use client";
+import { useState, useEffect } from "react";
+
+type Link = {
+  url: string;
+  sender: { id: string; name: string; avatar: string };
+  timestamp: string;
+  slackMessageId: string;
+  channel: { id: string; name: string };
+};
+
+type Article = {
+  title: string;
+  summary: string;
+  fullArticleUrl: string;
+  summaryUrl: string;
+  image: string;
+  tags: string[];
+  keywords: string[];
+  scrapedAt: string;
+};
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [tab, setTab] = useState<"ai-links" | "b2b-vault">("ai-links");
+  // AI Links state
+  const [links, setLinks] = useState<Link[]>([]);
+  const [linksLoading, setLinksLoading] = useState(false);
+  const [linksError, setLinksError] = useState<string | null>(null);
+  // B2B Vault state
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [articlesLoading, setArticlesLoading] = useState(false);
+  const [articlesError, setArticlesError] = useState<string | null>(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+  useEffect(() => {
+    if (tab === "ai-links" && links.length === 0 && !linksLoading) {
+      setLinksLoading(true);
+      fetch("/api/slack-links")
+        .then((res) => res.json())
+        .then((data) => {
+          setLinks(data.links || []);
+          setLinksError(null);
+        })
+        .catch(() => setLinksError("Failed to load Slack links."))
+        .finally(() => setLinksLoading(false));
+    }
+    if (tab === "b2b-vault" && articles.length === 0 && !articlesLoading) {
+      setArticlesLoading(true);
+      fetch("/api/b2b-vault")
+        .then((res) => res.json())
+        .then((data) => {
+          setArticles(data.articles || []);
+          setArticlesError(null);
+        })
+        .catch(() => setArticlesError("Failed to load B2B Vault articles."))
+        .finally(() => setArticlesLoading(false));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col items-center justify-center py-10 px-4">
+      <h1 className="text-3xl sm:text-5xl font-bold mb-8 text-center text-gray-900 dark:text-white drop-shadow-lg">Global Link Vault</h1>
+      <div className="flex space-x-2 mb-8">
+        <button
+          className={`px-6 py-2 rounded-t-lg font-semibold transition-colors duration-200 focus:outline-none ${tab === "ai-links" ? "bg-white dark:bg-gray-800 text-blue-600 shadow" : "bg-gray-200 dark:bg-gray-700 text-gray-500"}`}
+          onClick={() => setTab("ai-links")}
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+          AI Links
+        </button>
+        <button
+          className={`px-6 py-2 rounded-t-lg font-semibold transition-colors duration-200 focus:outline-none ${tab === "b2b-vault" ? "bg-white dark:bg-gray-800 text-blue-600 shadow" : "bg-gray-200 dark:bg-gray-700 text-gray-500"}`}
+          onClick={() => setTab("b2b-vault")}
         >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+          B2B Vault
+        </button>
+      </div>
+      <div className="w-full max-w-2xl bg-white dark:bg-gray-800 rounded-b-lg shadow-lg p-6 min-h-[300px]">
+        {tab === "ai-links" ? (
+          <div>
+            <h2 className="text-xl font-semibold mb-4 text-center text-gray-800 dark:text-gray-200">AI Links from Slack</h2>
+            {linksLoading ? (
+              <div className="text-center text-gray-400">Loading links...</div>
+            ) : linksError ? (
+              <div className="text-center text-red-500">{linksError}</div>
+            ) : links.length === 0 ? (
+              <div className="text-center text-gray-400">No links found.</div>
+            ) : (
+              <ul className="space-y-4">
+                {links.map((link) => (
+                  <li key={link.slackMessageId} className="bg-gray-100 dark:bg-gray-700 rounded p-4 flex flex-col sm:flex-row sm:items-center gap-2">
+                    <div className="flex items-center gap-3">
+                      <img src={link.sender.avatar} alt={link.sender.name} className="w-8 h-8 rounded-full border" />
+                      <div>
+                        <div className="font-semibold text-gray-900 dark:text-white">{link.sender.name}</div>
+                        <div className="text-xs text-gray-500">{new Date(link.timestamp).toLocaleString()}</div>
+                      </div>
+                    </div>
+                    <div className="mt-2 sm:mt-0 sm:ml-6 break-all">
+                      <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 underline">{link.url}</a>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : (
+          <div>
+            <h2 className="text-xl font-semibold mb-4 text-center text-gray-800 dark:text-gray-200">B2B Vault Articles</h2>
+            {articlesLoading ? (
+              <div className="text-center text-gray-400">Loading articles...</div>
+            ) : articlesError ? (
+              <div className="text-center text-red-500">{articlesError}</div>
+            ) : articles.length === 0 ? (
+              <div className="text-center text-gray-400">No articles found.</div>
+            ) : (
+              <ul className="space-y-4">
+                {articles.map((article, idx) => (
+                  <li key={idx} className="bg-gray-100 dark:bg-gray-700 rounded p-4 flex flex-col sm:flex-row sm:items-center gap-2">
+                    {article.image && (
+                      <img src={article.image} alt={article.title} className="w-16 h-16 object-cover rounded border mb-2 sm:mb-0" />
+                    )}
+                    <div className="flex-1">
+                      <a href={article.fullArticleUrl || article.summaryUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-600 dark:text-blue-400 underline block mb-1">
+                        {article.title}
+                      </a>
+                      <div className="text-sm text-gray-700 dark:text-gray-200 mb-1">{article.summary}</div>
+                      <div className="flex flex-wrap gap-1 text-xs text-gray-500">
+                        {article.tags.map((tag) => (
+                          <span key={tag} className="bg-blue-100 dark:bg-blue-900 rounded px-2 py-0.5">{tag}</span>
+                        ))}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
+      <footer className="mt-10 text-xs text-gray-400 text-center">
+        &copy; {new Date().getFullYear()} Global Link Vault. All rights reserved.
       </footer>
     </div>
   );
