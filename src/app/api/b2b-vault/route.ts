@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { B2BVaultScraper } from '@/lib/services/b2bVaultScraper';
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   try {
     const scraper = new B2BVaultScraper();
     const articles = await scraper.scrapeArticles(100);

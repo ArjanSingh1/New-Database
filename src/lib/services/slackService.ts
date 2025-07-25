@@ -53,7 +53,7 @@ export class SlackService {
     }
   }
 
-  extractLinksFromMessage(message: Record<string, unknown>) {
+  extractLinksFromMessage(message: unknown) {
     const text = (message as { text?: string }).text || '';
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const urls = text.match(urlRegex) || [];
@@ -67,29 +67,30 @@ export class SlackService {
       const messages = await this.getChannelMessages(channelId, 1000);
       const links: Array<Record<string, unknown>> = [];
 
-      for (const message of messages as Record<string, unknown>[]) {
-        if (!(message as any).user || !(message as any).ts) continue;
+      for (const message of messages as unknown[]) {
+        const msg = message as { user?: string; ts?: string; client_msg_id?: string; attachments?: { from_url?: string }[]; text?: string };
+        if (!msg.user || !msg.ts) continue;
 
-        const urls = this.extractLinksFromMessage(message);
+        const urls = this.extractLinksFromMessage(msg);
 
         if (urls.length > 0) {
-          const userInfo = await this.getUserInfo((message as any).user);
+          const userInfo = await this.getUserInfo(msg.user);
 
           for (const url of urls) {
             if (url) {
               links.push({
                 url: url.replace(/[<>]/g, ''), // Remove Slack's URL wrapping
-              sender: {
-                id: (message as any).user,
-                name: userInfo?.real_name || userInfo?.name || 'Unknown',
-                avatar: userInfo?.profile?.image_72 || '',
-              },
-              timestamp: new Date(parseFloat((message as any).ts) * 1000),
-              slackMessageId: (message as any).client_msg_id || (message as any).ts,
-              channel: {
-                id: channelId,
-                name: '', // Will be filled by the caller
-              },
+                sender: {
+                  id: msg.user,
+                  name: userInfo?.real_name || userInfo?.name || 'Unknown',
+                  avatar: userInfo?.profile?.image_72 || '',
+                },
+                timestamp: new Date(parseFloat(msg.ts) * 1000),
+                slackMessageId: msg.client_msg_id || msg.ts,
+                channel: {
+                  id: channelId,
+                  name: '', // Will be filled by the caller
+                },
               });
             }
           }
