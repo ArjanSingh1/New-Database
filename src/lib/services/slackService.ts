@@ -4,6 +4,14 @@ export class SlackService {
   private client: WebClient;
 
   constructor() {
+interface SlackMessage {
+  user?: string;
+  ts?: string;
+  client_msg_id?: string;
+  attachments?: Array<{ from_url?: string }>;
+  text?: string;
+}
+
     const token = process.env.SLACK_BOT_TOKEN;
     if (!token) {
       throw new Error('SLACK_BOT_TOKEN is required');
@@ -11,11 +19,12 @@ export class SlackService {
     this.client = new WebClient(token);
   }
 
-  async getChannelMessages(channelId: string, limit: number = 100) {
+  async getChannelMessages(channelId: string, limit: number = 100, oldest?: string) {
     try {
       const result = await this.client.conversations.history({
         channel: channelId,
         limit,
+        oldest, // Unix timestamp
       });
 
       return result.messages || [];
@@ -76,9 +85,42 @@ export class SlackService {
     return [...urls, ...attachmentUrls];
   }
 
-  async scrapeChannelLinks(channelId: string) {
+  async scrapeChannelLinks(channelId: string, days: number = 7, senderFilter?: string) {
     try {
-      const messages = await this.getChannelMessages(channelId, 1000);
+      // Calculate oldest timestamp for filtering
+      const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+      let oldestTimestamp = Math.floor(cutoffDate.getTime() / 1000).toString();
+      
+      let allMessages: unknown[] = [];
+      let hasMore = true;
+      
+      // Paginate through all messages within the time range
+      while (hasMore && allMessages.length < 5000) { // Safety limit
+        const messages = await this.getChannelMessages(channelId, 1000, oldestTimestamp);
+        
+        if (!messages || messages.length === 0) {
+          hasMore = false;
+          break;
+        }
+        
+        allMessages = allMessages.concat(messages);
+        
+        // Check if we need to paginate further
+        const lastMessage = messages[messages.length - 1] as SlackMessage;
+        if (lastMessage && lastMessage.ts) {
+          const lastMessageTime = new Date(parseFloat(lastMessage.ts) * 1000);
+          if (lastMessageTime > cutoffDate && messages.length === 1000) {
+            // Continue pagination
+            oldestTimestamp = lastMessage.ts;
+          } else {
+            hasMore = false;
+          }
+        } else {
+          hasMore = false;
+        }
+      }
+      
+      console.log(`Fetched ${allMessages.length} total messages for ${days} days`);
       
       interface SlackMessage {
         user?: string;
@@ -89,6 +131,7 @@ export class SlackService {
       }
       
       interface LinkResult {
+        _id?: string;
         url: string;
         sender: {
           id: string;
@@ -101,40 +144,65 @@ export class SlackService {
           id: string;
           name: string;
         };
+        votes: {
+          up: number;
+          down: number;
+        };
+        comments: Array<{
+          id: string;
+          user: string;
+          text: string;
+          timestamp: Date;
+        }>;
       }
       
       const links: LinkResult[] = [];
 
-      for (const message of messages as unknown[]) {
+      for (const message of allMessages) {
         const msg = message as SlackMessage;
         if (!msg.user || !msg.ts) continue;
+
+        const messageDate = new Date(parseFloat(msg.ts) * 1000);
+        if (messageDate < cutoffDate) continue;
 
         const urls = this.extractLinksFromMessage(msg);
 
         if (urls.length > 0) {
           const userInfo = await this.getUserInfo(msg.user);
+          
+          // Apply sender filter if provided
+          if (senderFilter && userInfo?.name !== senderFilter && userInfo?.real_name !== senderFilter) {
+            continue;
+          }
 
           for (const url of urls) {
             if (url && typeof url === 'string') {
               links.push({
+                _id: msg.client_msg_id || msg.ts, // Use as temporary ID
                 url: url.replace(/[<>]/g, ''), // Remove Slack's URL wrapping
                 sender: {
                   id: msg.user,
                   name: userInfo?.real_name || userInfo?.name || 'Unknown',
                   avatar: userInfo?.profile?.image_72 || '',
                 },
-                timestamp: new Date(parseFloat(msg.ts) * 1000),
+                timestamp: messageDate,
                 slackMessageId: msg.client_msg_id || msg.ts,
                 channel: {
                   id: channelId,
                   name: '', // Will be filled by the caller
                 },
+                votes: {
+                  up: 0,
+                  down: 0,
+                },
+                comments: [],
               });
             }
           }
         }
       }
 
+      console.log(`Extracted ${links.length} links after filtering`);
       return links;
     } catch (error) {
       console.error('Error scraping channel links:', error);

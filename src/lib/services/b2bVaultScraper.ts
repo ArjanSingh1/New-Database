@@ -2,10 +2,12 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 
 export class B2BVaultScraper {
-  private baseUrl = 'https://b2bvault.com'; // Replace with actual B2B Vault URL
+  private baseUrl = 'https://b2bvault.ws';
 
   async scrapeArticles(limit: number = 100) {
     try {
+      console.log(`Starting scrape of ${this.baseUrl}`);
+      
       const response = await axios.get(this.baseUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
@@ -13,7 +15,9 @@ export class B2BVaultScraper {
         timeout: 30000,
       });
 
+      console.log(`Received response, status: ${response.status}`);
       const $ = cheerio.load(response.data);
+      
       const articles: Array<{
         title: string;
         summary: string;
@@ -23,51 +27,110 @@ export class B2BVaultScraper {
         tags: string[];
         keywords: string[];
         scrapedAt: Date;
+        votes: {
+          up: number;
+          down: number;
+        };
+        comments: Array<{
+          id: string;
+          user: string;
+          text: string;
+          timestamp: Date;
+        }>;
       }> = [];
 
-      // This selector will need to be updated based on the actual B2B Vault website structure
-      $('.article-card, .post-card, [data-testid="article-card"]').each((index, element) => {
-        if (index >= limit) return false;
+      // Try multiple selectors for articles
+      const selectors = [
+        'article',
+        '.post',
+        '.entry',
+        '.article',
+        '.blog-post',
+        '[class*="post"]',
+        '[class*="article"]',
+        'h2 a, h3 a'
+      ];
 
-        const $el = $(element);
-        const title = $el.find('h2, h3, .title, [data-testid="article-title"]').first().text().trim();
-        const summary = $el.find('.summary, .excerpt, .description, p').first().text().trim();
-        const image = $el.find('img').first().attr('src') || '';
+      console.log(`Trying ${selectors.length} different selectors`);
+
+      for (const selector of selectors) {
+        const elements = $(selector);
+        console.log(`Selector "${selector}" found ${elements.length} elements`);
         
-        // Look for "read full article" and "read summary" buttons
-        const fullArticleBtn = $el.find('a:contains("read full article"), a:contains("Read Full Article"), .read-more, .full-article-link');
-        const summaryBtn = $el.find('a:contains("read summary"), a:contains("Read Summary"), .summary-link');
-        
-        const fullArticleUrl = this.resolveUrl(fullArticleBtn.attr('href') || '');
-        const summaryUrl = this.resolveUrl(summaryBtn.attr('href') || '');
+        if (elements.length > 0) {
+          elements.each((index, element) => {
+            if (index >= limit) return false;
 
-        // Extract tags from various possible locations
-        const tags: string[] = [];
-        $el.find('.tag, .category, .label, [data-testid="tag"]').each((_, tagEl) => {
-          const tag = $(tagEl).text().trim();
-          if (tag) tags.push(tag);
-        });
+            const $el = $(element);
+            
+            // Try to extract title from various locations
+            let title = $el.find('h1, h2, h3, .title, [class*="title"]').first().text().trim();
+            if (!title) {
+              title = $el.text().trim().substring(0, 100);
+            }
+            if (!title && $el.is('a')) {
+              title = $el.text().trim();
+            }
+            
+            // Try to extract summary
+            let summary = $el.find('.summary, .excerpt, .description, p').first().text().trim();
+            if (!summary) {
+              summary = $el.text().trim().substring(0, 200);
+            }
+            
+            // Try to get link
+            let link = '';
+            if ($el.is('a')) {
+              link = $el.attr('href') || '';
+            } else {
+              link = $el.find('a').first().attr('href') || '';
+            }
+            
+            const image = $el.find('img').first().attr('src') || '';
+            
+            // Extract tags
+            const tags: string[] = [];
+            $el.find('.tag, .category, .label, [class*="tag"], [class*="category"]').each((_, tagEl) => {
+              const tag = $(tagEl).text().trim();
+              if (tag) tags.push(tag);
+            });
 
-        // Extract keywords from title and summary
-        const keywords = this.extractKeywords(title + ' ' + summary);
+            const keywords = this.extractKeywords(title + ' ' + summary);
 
-        if (title && (fullArticleUrl || summaryUrl)) {
-          articles.push({
-            title,
-            summary: summary || '',
-            fullArticleUrl,
-            summaryUrl,
-            image: this.resolveUrl(image),
-            tags,
-            keywords,
-            scrapedAt: new Date(),
+            if (title && title.length > 5) {
+              articles.push({
+                title,
+                summary: summary || '',
+                fullArticleUrl: this.resolveUrl(link),
+                summaryUrl: this.resolveUrl(link),
+                image: this.resolveUrl(image),
+                tags,
+                keywords,
+                scrapedAt: new Date(),
+                votes: {
+                  up: 0,
+                  down: 0,
+                },
+                comments: [],
+              });
+            }
           });
+          
+          if (articles.length > 0) {
+            console.log(`Successfully extracted ${articles.length} articles using selector: ${selector}`);
+            break;
+          }
         }
-      });
+      }
 
+      console.log(`Final result: ${articles.length} articles extracted`);
       return articles;
     } catch (error) {
       console.error('Error scraping B2B Vault:', error);
+      if (error instanceof Error) {
+        console.error('Error details:', error.message);
+        console.error('Stack trace:', error.stack);
+      }
       throw error;
     }
   }
