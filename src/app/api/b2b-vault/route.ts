@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { B2BVaultScraper } from '@/lib/services/b2bVaultScraper';
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function GET(_req: NextRequest) {
   try {
     const scraper = new B2BVaultScraper();
@@ -9,6 +10,7 @@ export async function GET(_req: NextRequest) {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   } catch (_error) {
     return new Response(JSON.stringify({ error: 'Failed to scrape B2B Vault' }), {
       status: 500,

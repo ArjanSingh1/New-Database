@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { SlackService } from '@/lib/services/slackService';
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function GET(_req: NextRequest) {
   try {
     const slack = new SlackService();
@@ -10,6 +11,7 @@ export async function GET(_req: NextRequest) {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   } catch (_error) {
     return new Response(JSON.stringify({ error: 'Failed to fetch Slack links' }), {
       status: 500,

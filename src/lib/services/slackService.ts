@@ -58,7 +58,7 @@ export class SlackService {
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const urls = text.match(urlRegex) || [];
     // Also check for attachments or link unfurls
-    const attachmentUrls = (message as { attachments?: { from_url?: string }[] }).attachments?.map((att) => att.from_url).filter(Boolean) || [];
+    const attachmentUrls = (message as { attachments?: Array<{ from_url?: string }> }).attachments?.map((att: { from_url?: string }) => att.from_url).filter(Boolean) || [];
     return [...urls, ...attachmentUrls];
   }
 
