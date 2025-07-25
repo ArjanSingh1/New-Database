@@ -54,13 +54,12 @@ export class SlackService {
   }
 
   extractLinksFromMessage(message: unknown) {
-    type Attachment = { from_url?: string };
+    interface Attachment { from_url?: string }
     const text = (message as { text?: string }).text || '';
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const urls = text.match(urlRegex) || [];
-    const attachmentUrls = ((message as { attachments?: Attachment[] }).attachments || [])
-      .map((att: { from_url?: string }) => att.from_url)
-      .filter(Boolean);
+    const attachments: Attachment[] = (message as { attachments?: Attachment[] }).attachments || [];
+    const attachmentUrls = attachments.map((att) => att.from_url).filter(Boolean);
     return [...urls, ...attachmentUrls];
   }
 
