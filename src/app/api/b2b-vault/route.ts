@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
-  } catch (error) {
+  } catch (_error) {
     return new Response(JSON.stringify({ error: 'Failed to scrape B2B Vault' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },

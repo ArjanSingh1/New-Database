@@ -53,45 +53,45 @@ export class SlackService {
     }
   }
 
-  extractLinksFromMessage(message: any) {
-    const text = message.text || '';
+  extractLinksFromMessage(message: Record<string, unknown>) {
+    const text = (message as { text?: string }).text || '';
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const urls = text.match(urlRegex) || [];
-    
     // Also check for attachments or link unfurls
-    const attachmentUrls = message.attachments?.map((att: any) => att.from_url).filter(Boolean) || [];
-    
+    const attachmentUrls = (message as { attachments?: { from_url?: string }[] }).attachments?.map((att) => att.from_url).filter(Boolean) || [];
     return [...urls, ...attachmentUrls];
   }
 
   async scrapeChannelLinks(channelId: string) {
     try {
       const messages = await this.getChannelMessages(channelId, 1000);
-      const links = [];
+      const links: Array<Record<string, unknown>> = [];
 
-      for (const message of messages) {
-        if (!message.user || !message.ts) continue;
+      for (const message of messages as Record<string, unknown>[]) {
+        if (!(message as any).user || !(message as any).ts) continue;
 
         const urls = this.extractLinksFromMessage(message);
-        
+
         if (urls.length > 0) {
-          const userInfo = await this.getUserInfo(message.user);
-          
+          const userInfo = await this.getUserInfo((message as any).user);
+
           for (const url of urls) {
-            links.push({
-              url: url.replace(/[<>]/g, ''), // Remove Slack's URL wrapping
+            if (url) {
+              links.push({
+                url: url.replace(/[<>]/g, ''), // Remove Slack's URL wrapping
               sender: {
-                id: message.user,
+                id: (message as any).user,
                 name: userInfo?.real_name || userInfo?.name || 'Unknown',
                 avatar: userInfo?.profile?.image_72 || '',
               },
-              timestamp: new Date(parseFloat(message.ts) * 1000),
-              slackMessageId: message.client_msg_id || message.ts,
+              timestamp: new Date(parseFloat((message as any).ts) * 1000),
+              slackMessageId: (message as any).client_msg_id || (message as any).ts,
               channel: {
                 id: channelId,
                 name: '', // Will be filled by the caller
               },
-            });
+              });
+            }
           }
         }
       }
