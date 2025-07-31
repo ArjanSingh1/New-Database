@@ -43,7 +43,7 @@ export class B2BVaultScraper {
               foundArticles = true;
             }
             break;
-          } catch (err) {
+          } catch {
             attempt++;
             if (attempt >= maxAttempts) continue;
             await delay(1000 * Math.pow(2, attempt));

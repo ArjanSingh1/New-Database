@@ -47,11 +47,11 @@ export async function GET(req: NextRequest) {
       const file = fs.readFileSync(cachePath, 'utf-8');
       const allLinks = JSON.parse(file);
       // Filter by date, sender, keyword
-      links = allLinks.filter((link: any) => {
+      links = allLinks.filter((link: { timestamp: string; sender?: { name?: string }; url: string; comments?: Array<{ text: string }> }) => {
         const ts = Math.floor(new Date(link.timestamp).getTime() / 1000);
         const matchesDate = ts >= fromTs && ts <= toTs;
         const matchesSender = !sender || link.sender?.name === sender;
-        const matchesKeyword = !keyword || link.url.toLowerCase().includes(keyword.toLowerCase()) || (link.comments || []).some((c: any) => c.text.toLowerCase().includes(keyword.toLowerCase()));
+        const matchesKeyword = !keyword || link.url.toLowerCase().includes(keyword.toLowerCase()) || (link.comments || []).some((c: { text: string }) => c.text.toLowerCase().includes(keyword.toLowerCase()));
         return matchesDate && matchesSender && matchesKeyword;
       });
       console.log(`[Slack Links API] Served ${links.length} links from cache.`);
