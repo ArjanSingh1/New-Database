@@ -1,5 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getSlackLinks } from '@/lib/services/slackService';
+import * as fs from 'fs';
+import * as path from 'path';
 import connectDB from '@/lib/database';
 import { Link } from '@/lib/models/Link';
 
@@ -7,8 +9,17 @@ export async function GET(req: NextRequest) {
   try {
     console.log('Slack Links API called');
     const url = new URL(req.url);
-    const from = url.searchParams.get('from');
-    const to = url.searchParams.get('to');
+    let from = url.searchParams.get('from');
+    let to = url.searchParams.get('to');
+
+    // If missing, default to last 7 days
+    if (!from || !to) {
+      const now = new Date();
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      from = weekAgo.toISOString().split('T')[0];
+      to = now.toISOString().split('T')[0];
+      console.warn('[Slack Links API] Missing from/to params, defaulting to last 7 days', { from, to });
+    }
     const sender = url.searchParams.get('sender') || undefined;
     const keyword = url.searchParams.get('keyword') || '';
 
@@ -29,12 +40,29 @@ export async function GET(req: NextRequest) {
     // Add logging for debugging
     console.log(`[Slack Links API] from: ${from} (${fromTs}), to: ${to} (${toTs}), sender: ${sender}, keyword: ${keyword}`);
 
-    let links;
-    try {
-      links = await getSlackLinks({ from: fromTs, to: toTs, sender, keyword });
-    } catch (fetchErr) {
-      console.error('[Slack Links API] getSlackLinks error:', fetchErr);
-      return new Response(JSON.stringify({ error: 'Failed to fetch Slack links', details: fetchErr instanceof Error ? fetchErr.message : fetchErr }), { status: 500 });
+    // Try to read from cache first
+    let links = [];
+    const cachePath = path.join(process.cwd(), 'data', 'slackLinks.json');
+    if (fs.existsSync(cachePath)) {
+      const file = fs.readFileSync(cachePath, 'utf-8');
+      const allLinks = JSON.parse(file);
+      // Filter by date, sender, keyword
+      links = allLinks.filter((link: any) => {
+        const ts = Math.floor(new Date(link.timestamp).getTime() / 1000);
+        const matchesDate = ts >= fromTs && ts <= toTs;
+        const matchesSender = !sender || link.sender?.name === sender;
+        const matchesKeyword = !keyword || link.url.toLowerCase().includes(keyword.toLowerCase()) || (link.comments || []).some((c: any) => c.text.toLowerCase().includes(keyword.toLowerCase()));
+        return matchesDate && matchesSender && matchesKeyword;
+      });
+      console.log(`[Slack Links API] Served ${links.length} links from cache.`);
+    } else {
+      // Fallback: fetch from Slack API if cache is missing
+      try {
+        links = await getSlackLinks({ from: fromTs, to: toTs, sender, keyword });
+      } catch (fetchErr) {
+        console.error('[Slack Links API] getSlackLinks error:', fetchErr);
+        return new Response(JSON.stringify({ error: 'Failed to fetch Slack links', details: fetchErr instanceof Error ? fetchErr.message : fetchErr }), { status: 500 });
+      }
     }
 
     // Save to MongoDB and get back with proper IDs

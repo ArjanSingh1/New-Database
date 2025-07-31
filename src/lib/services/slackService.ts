@@ -32,13 +32,7 @@ export class SlackService {
   private client: WebClient;
 
   constructor() {
-interface SlackMessage {
-  user?: string;
-  ts?: string;
-  client_msg_id?: string;
-  attachments?: Array<{ from_url?: string }>;
-  text?: string;
-}
+// Removed unused SlackMessage interface
 
     const token = process.env.SLACK_BOT_TOKEN;
     if (!token) {

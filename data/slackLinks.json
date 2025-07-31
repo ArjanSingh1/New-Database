@@ -1,0 +1,62 @@
+[
+  {
+    "_id": "sample1",
+    "url": "https://example.com/ai-article-1",
+    "sender": {
+      "id": "U123456",
+      "name": "John Doe",
+      "avatar": "https://ca.slack-edge.com/T123-U123456-abc123def456-72"
+    },
+    "timestamp": "2025-07-31T10:00:00.000Z",
+    "slackMessageId": "1722420000.000100",
+    "channel": {
+      "id": "C04FLMADLRM",
+      "name": "ai-links"
+    },
+    "votes": {
+      "up": 0,
+      "down": 0
+    },
+    "comments": []
+  },
+  {
+    "_id": "sample2",
+    "url": "https://example.com/machine-learning-guide",
+    "sender": {
+      "id": "U789012",
+      "name": "Jane Smith",
+      "avatar": "https://ca.slack-edge.com/T123-U789012-def456ghi789-72"
+    },
+    "timestamp": "2025-07-30T15:30:00.000Z",
+    "slackMessageId": "1722353400.000200",
+    "channel": {
+      "id": "C04FLMADLRM",
+      "name": "ai-links"
+    },
+    "votes": {
+      "up": 0,
+      "down": 0
+    },
+    "comments": []
+  },
+  {
+    "_id": "sample3",
+    "url": "https://github.com/openai/gpt-4",
+    "sender": {
+      "id": "U345678",
+      "name": "AI Researcher",
+      "avatar": "https://ca.slack-edge.com/T123-U345678-ghi789jkl012-72"
+    },
+    "timestamp": "2025-07-29T09:15:00.000Z",
+    "slackMessageId": "1722244500.000300",
+    "channel": {
+      "id": "C04FLMADLRM",
+      "name": "ai-links"
+    },
+    "votes": {
+      "up": 0,
+      "down": 0
+    },
+    "comments": []
+  }
+]

@@ -96,10 +96,11 @@ export default function Home() {
       if (sender) params.append('sender', sender);
       const res = await fetch(`/api/slack-links?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to fetch links');
-      const data = await res.json();
+      const data: { links: Link[] } = await res.json();
       setLinks(data.links || []);
-    } catch (err: any) {
-      setLinksError(err.message || 'Error fetching links');
+    } catch (err) {
+      if (err instanceof Error) setLinksError(err.message || 'Error fetching links');
+      else setLinksError('Error fetching links');
     } finally {
       setLinksLoading(false);
     }
@@ -112,10 +113,11 @@ export default function Home() {
     try {
       const res = await fetch('/api/b2b-vault');
       if (!res.ok) throw new Error('Failed to fetch articles');
-      const data = await res.json();
+      const data: { articles: Article[] } = await res.json();
       setArticles(data.articles || []);
-    } catch (err: any) {
-      setArticlesError(err.message || 'Error fetching articles');
+    } catch (err) {
+      if (err instanceof Error) setArticlesError(err.message || 'Error fetching articles');
+      else setArticlesError('Error fetching articles');
     } finally {
       setArticlesLoading(false);
     }
@@ -133,7 +135,7 @@ export default function Home() {
       if (!res.ok) throw new Error('Failed to vote');
       if (isArticle) fetchArticles();
       else fetchLinks(fromDate, toDate, senderFilter);
-    } catch (err) {
+    } catch {
       alert('Error voting.');
     }
   };
@@ -153,7 +155,7 @@ export default function Home() {
       setCommentTexts(prev => ({ ...prev, [id]: '' }));
       if (isArticle) fetchArticles();
       else fetchLinks(fromDate, toDate, senderFilter);
-    } catch (err) {
+    } catch {
       alert('Error posting comment.');
     }
   };
@@ -162,7 +164,6 @@ export default function Home() {
   useEffect(() => {
     if (tab === 'ai-links') fetchLinks(fromDate, toDate, senderFilter);
     else fetchArticles();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, fromDate, toDate, senderFilter]);
 
   // ...JSX follows...
@@ -280,6 +281,7 @@ export default function Home() {
                   >
                     <div className="flex flex-col sm:flex-row sm:items-start gap-3">
                       <div className="flex items-center gap-3">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={link.sender.avatar} alt={link.sender.name} className="w-8 h-8 rounded-full border" />
                         <div>
                           <div className="font-semibold text-gray-900 dark:text-white">{link.sender.name}</div>
@@ -367,6 +369,7 @@ export default function Home() {
                   <div key={article._id || `article-${idx}`} className="bg-gray-100 dark:bg-gray-700 rounded p-4">
                     <div className="flex flex-col sm:flex-row sm:items-start gap-3">
                       {article.image && (
+                        /* eslint-disable-next-line @next/next/no-img-element */
                         <img src={article.image} alt={article.title} className="w-16 h-16 object-cover rounded border" />
                       )}
                       <div className="flex-1">
