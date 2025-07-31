@@ -65,32 +65,38 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Save to MongoDB and get back with proper IDs
-    await connectDB();
-    const savedLinks = [];
-    for (const link of links) {
-      try {
-        const existingLink = await Link.findOne({ slackMessageId: link.slackMessageId });
-        if (existingLink) {
-          savedLinks.push(existingLink);
-        } else {
-          const newLink = new Link({
-            url: link.url,
-            sender: link.sender,
-            timestamp: link.timestamp,
-            slackMessageId: link.slackMessageId,
-            channel: link.channel,
-            votes: { up: 0, down: 0 },
-            comments: []
-          });
-          const saved = await newLink.save();
-          savedLinks.push(saved);
+    // Save to MongoDB and get back with proper IDs (optional, fallback to cache data if DB fails)
+    let savedLinks = [];
+    try {
+      await connectDB();
+      for (const link of links) {
+        try {
+          const existingLink = await Link.findOne({ slackMessageId: link.slackMessageId });
+          if (existingLink) {
+            savedLinks.push(existingLink);
+          } else {
+            const newLink = new Link({
+              url: link.url,
+              sender: link.sender,
+              timestamp: link.timestamp,
+              slackMessageId: link.slackMessageId,
+              channel: link.channel,
+              votes: { up: 0, down: 0 },
+              comments: []
+            });
+            const saved = await newLink.save();
+            savedLinks.push(saved);
+          }
+        } catch (dbError) {
+          console.error('Error saving individual link:', dbError);
+          // If DB save fails, still return the link with temp ID
+          savedLinks.push(link);
         }
-      } catch (dbError) {
-        console.error('Error saving link:', dbError);
-        // If DB save fails, still return the link with temp ID
-        savedLinks.push(link);
       }
+    } catch (dbConnectionError) {
+      console.error('MongoDB connection failed, using cache data directly:', dbConnectionError);
+      // If MongoDB connection fails entirely, just use the cached data
+      savedLinks = links;
     }
 
     return new Response(JSON.stringify({ links: savedLinks }), {
